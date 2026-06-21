@@ -1592,9 +1592,11 @@ sidebar = column(
 # ==========================================
 
 def make_narrative(number, title, body, finding):
+    is_html = str(number).startswith("<")
+    number_style = "opacity: 1;" if is_html else ""
     return f"""
 <div class="narrative-block">
-    <div class="narrative-number">{number}</div>
+    <div class="narrative-number" style="{number_style}">{number}</div>
     <div class="narrative-content">
         <h3 class="narrative-title">{title}</h3>
         <p class="narrative-body">{body}</p>
@@ -1606,11 +1608,27 @@ def make_narrative(number, title, body, finding):
 </div>
 """
 
+cosmos_icon = """<svg width="42" height="42" viewBox="0 0 24 24" fill="none" stroke="url(#cosmos-grad)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="filter: drop-shadow(0 0 5px rgba(0, 210, 255, 0.4)); margin-top: -2px; display: inline-block;">
+  <defs>
+    <linearGradient id="cosmos-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#00d2ff" />
+      <stop offset="100%" stop-color="#00f0a0" />
+    </linearGradient>
+  </defs>
+  <ellipse cx="12" cy="12" rx="9" ry="3" transform="rotate(-30 12 12)" stroke-dasharray="3 1" />
+  <ellipse cx="12" cy="12" rx="6" ry="2" transform="rotate(30 12 12)" />
+  <circle cx="12" cy="12" r="2.5" fill="url(#cosmos-grad)" />
+  <circle cx="5" cy="6" r="0.7" fill="#00d2ff" />
+  <circle cx="19" cy="18" r="0.7" fill="#00f0a0" />
+  <circle cx="18" cy="5" r="0.5" fill="#ffffff" />
+  <circle cx="6" cy="19" r="0.5" fill="#ffffff" />
+</svg>"""
+
 narrative_0 = make_narrative(
-    "00",
+    cosmos_icon,
     "The AI Model Cosmos: Size, Timeline, and Openness",
-    "This interactive scatter plot maps individual AI models by their release date and parameter scale (log scale). The points are color-coded by openness: green for open weights and red for closed models. Use the free-form lasso or box select tools to drag and select a cluster of models; this will dynamically filter all subsequent charts to analyze only the selected models.",
-    "Hover over any model to see details. Drag a lasso or box around points to filter the entire dashboard by those specific models."
+    "This interactive scatter plot maps the exponential growth of global AI model parameter scales (2012–2026) based on their release dates and accessibility (green for Open Weights, red for Closed). This introductory chart shows how rapidly the size of these AI models has bloated over the years. While this rapid brain-size expansion promises leaps in intelligence at what ecological cost does it ultimately come?",
+    "While Open Weight models are growing rapidly, the largest models (reaching the trillion-parameter scale) are still dominated by Closed Source architectures that require massive amounts of energy."
 )
 
 narrative_1 = make_narrative(
@@ -1623,8 +1641,8 @@ narrative_1 = make_narrative(
 narrative_2 = make_narrative(
     "02",
     "The Explosion of AI Compute Costs",
-    "This visualization compares AI model size (blue bars) against training compute demand (red bars). Since 2022, the energy consumption required to train new models has risen exponentially.",
-    "AI training compute costs have exploded since 2022 &mdash; not only are there more models, but each new model is exponentially more energy-hungry."
+    "Comparing AI model size (blue) to training compute (red) reveals a stark trajectory: since 2022, the energy required to train new models has surged exponentially, far outpacing basic model scaling.",
+    "Post-2022 models are not just multiplying—they are exponentially more energy-hungry, accelerating compute demands to unprecedented levels."
 )
 
 narrative_3 = make_narrative(
@@ -1637,8 +1655,8 @@ narrative_3 = make_narrative(
 narrative_4 = make_narrative(
     "04",
     "The Capacity vs. Carbon Intensity Matrix",
-    "This scatter plot maps total compute capacity (log scale) against grid carbon intensity, utilizing a 100 gCO₂e/kWh horizontal line as the EU Taxonomy threshold for substantial climate mitigation contribution. Entities in the bottom-right quadrant represent high-capacity operations running on cleaner grids.",
-    "The 100 gCO₂e/kWh line marks the threshold for clean energy; entities below this line utilize grids that meet strict low-carbon standards, while those to the right operate at massive scale."
+    "Where we build data centers matters as much as how much capacity we add. By comparing compute capacity to local grid carbon intensity, this matrix exposes which players are scaling cleanly (bottom-right) versus those expanding heavily on carbon-heavy grids (top-right).",
+    "Few high-capacity players manage to stay below the green EU Taxonomy threshold (100 gCO₂e/kWh), highlighting a critical gap between scaling AI power and securing clean grid infrastructure."
 )
 
 narrative_5 = make_narrative(
