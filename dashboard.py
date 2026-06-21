@@ -99,7 +99,7 @@ df_models['negative_log_flops'] = -df_models['log_flops']
 
 df_models_clean = df_models.fillna({'params': 0, 'flops': 0, 'log_params': 0, 'log_flops': 0, 'negative_log_flops': 0})
 df_models_clean['pub_year'] = df_models_clean['pub_date'].dt.year
-df_models_clean['pub_date_ms'] = df_models_clean['pub_date'].astype('int64') // 10**6
+df_models_clean['pub_date_ms'] = df_models_clean['pub_date'].astype('datetime64[ms]').astype('int64')
 df_models_clean = df_models_clean[(df_models_clean['pub_year'] >= 2012) & (df_models_clean['pub_year'] <= 2026)]
 
 # * Helper formatting for hover text in Chart 00
@@ -263,20 +263,32 @@ dc_by_country = df_datacenters.groupby('country').agg(
 matrix_company = pd.merge(dc_by_company, models_by_company, left_on='company', right_on='org', how='inner')
 matrix_company['entity'] = matrix_company['company']
 matrix_company['type'] = 'By Company'
+matrix_company['company_name'] = matrix_company['company']
 
 matrix_country = pd.merge(dc_by_country, models_by_country, on='country', how='inner')
 matrix_country['entity'] = matrix_country['country']
 matrix_country['type'] = 'By Country'
+matrix_country['company_name'] = ""
+
+# * Individual datacenters sites matrix representation
+matrix_dc = df_datacenters.copy()
+matrix_dc['entity'] = matrix_dc['title']
+matrix_dc['type'] = 'All Datacenters'
+matrix_dc['model_count'] = 0
+matrix_dc['est_co2'] = matrix_dc['co2']
+matrix_dc['company_name'] = matrix_dc['company']
 
 df_matrix = pd.concat([
-    matrix_company[['entity', 'megawatts', 'carbon_intensity', 'model_count', 'est_co2', 'type']],
-    matrix_country[['entity', 'megawatts', 'carbon_intensity', 'model_count', 'est_co2', 'type']]
+    matrix_company[['entity', 'megawatts', 'carbon_intensity', 'model_count', 'est_co2', 'type', 'company_name']],
+    matrix_country[['entity', 'megawatts', 'carbon_intensity', 'model_count', 'est_co2', 'type', 'company_name']],
+    matrix_dc[['entity', 'megawatts', 'carbon_intensity', 'model_count', 'est_co2', 'type', 'company_name']]
 ])
 df_matrix.rename(columns={'megawatts': 'capacity_mw'}, inplace=True)
 df_matrix = df_matrix.fillna(0)
 df_matrix = df_matrix[df_matrix['capacity_mw'] > 0]
 max_co2_matrix = df_matrix['est_co2'].max()
 df_matrix['bubble_size'] = np.sqrt(df_matrix['est_co2'].clip(lower=1) / max(max_co2_matrix, 1)) * 44 + 8
+
 
 source_models_master = ColumnDataSource(df_models_clean)
 source_models_view = ColumnDataSource(df_models_clean)
@@ -301,7 +313,7 @@ source_map_master = ColumnDataSource(df_map_grouped)
 source_map_view = ColumnDataSource(df_map_grouped)
 
 source_matrix_master = ColumnDataSource(df_matrix)
-source_matrix_view = ColumnDataSource(df_matrix[df_matrix['type'] == 'By Company'].copy())
+source_matrix_view = ColumnDataSource(df_matrix[df_matrix['type'] == 'By Country'].copy())
 
 # Initial data prep for Chart 1 with latest model per organization
 idx_latest = df_models_clean.groupby('org')['pub_date'].idxmax()
@@ -540,13 +552,8 @@ chart3_theme_label = Div(text="""
 """)
 chart3_theme_select = Select(
     title="",
-    options=[
-        ("dark", "Dark Matter"),
-        ("voyager", "Light Matter"),
-        ("osm", "Open Street Map"),
-        ("satellite", "Satellite Earth")
-    ],
-    value="dark",
+    options=["Dark Matter", "Light Matter", "Open Street Map", "Satellite Earth"],
+    value="Dark Matter",
     width=210
 )
 chart3_theme_callback = CustomJS(args=dict(
@@ -554,14 +561,21 @@ chart3_theme_callback = CustomJS(args=dict(
     selector=chart3_theme_select
 ), code="""
     const theme = selector.value;
+    const theme_map = {
+        "Dark Matter": "dark",
+        "Light Matter": "voyager",
+        "Open Street Map": "osm",
+        "Satellite Earth": "satellite"
+    };
+    const theme_val = theme_map[theme] || "dark";
     let url = "";
-    if (theme === "dark") {
+    if (theme_val === "dark") {
         url = "https://a.basemaps.cartocdn.com/dark_all/{Z}/{X}/{Y}.png";
-    } else if (theme === "voyager") {
+    } else if (theme_val === "voyager") {
         url = "https://a.basemaps.cartocdn.com/rastertiles/voyager/{Z}/{X}/{Y}.png";
-    } else if (theme === "osm") {
+    } else if (theme_val === "osm") {
         url = "https://a.tile.openstreetmap.org/{Z}/{X}/{Y}.png";
-    } else if (theme === "satellite") {
+    } else if (theme_val === "satellite") {
         url = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{Z}/{Y}/{X}";
     }
     tile_source.url = url;
@@ -736,8 +750,8 @@ chart4_label = Div(text="""
 """)
 matrix_toggle = Select(
     title="",
-    options=[("By Company", "By Company"), ("By Country", "By Country")],
-    value="By Company",
+    options=["All Datacenters", "By Company", "By Country"],
+    value="By Country",
     width=180,
     margin=(0, 0, 4, 0)
 )
@@ -759,11 +773,11 @@ chart5_sort_label = Div(text="""
 chart5_sort_select = Select(
     title="",
     options=[
-        ("total_co2", "CO\u2082 Emissions (tons/yr)"),
-        ("total_mw", "DC Capacity (MW)"),
-        ("avg_carbon", "Carbon Intensity (gCO\u2082/kWh)"),
+        "CO₂ Emissions (tons/yr)",
+        "DC Capacity (MW)",
+        "Carbon Intensity (gCO₂/kWh)"
     ],
-    value="total_co2",
+    value="CO₂ Emissions (tons/yr)",
     width=210
 )
 
@@ -1109,10 +1123,49 @@ update_downstream_callback = CustomJS(args=dict(
     p6_flops_range=p6.extra_y_ranges['flops_range'],
     vline4=vline4,
     vline4_label=vline4_label,
+    labels4=labels4,
     color_mapper_co2=color_mapper_co2,
     date_sl=date_slider,
     countries=country_select
-), code="""
+), code=r"""
+    function matchCompany(active_orgs, dc_str) {
+        if (!dc_str) return false;
+        const dc_lower = dc_str.toLowerCase();
+        const dc_tokens = dc_lower.replace(/[^a-z0-9]/g, ' ').split(/\s+/).filter(x => x.length > 2);
+        
+        for (const active_org of active_orgs) {
+            const org_lower = active_org.toLowerCase();
+            
+            // Substring checks for major companies
+            if (org_lower.includes("google") && dc_lower.includes("google")) return true;
+            if (org_lower.includes("meta") && dc_lower.includes("meta")) return true;
+            if (org_lower.includes("facebook") && dc_lower.includes("meta")) return true;
+            if (org_lower.includes("facebook") && dc_lower.includes("facebook")) return true;
+            if (org_lower.includes("openai") && dc_lower.includes("openai")) return true;
+            if (org_lower.includes("microsoft") && dc_lower.includes("microsoft")) return true;
+            if (org_lower.includes("amazon") && dc_lower.includes("amazon")) return true;
+            if (org_lower.includes("nvidia") && dc_lower.includes("nvidia")) return true;
+            if (org_lower.includes("apple") && dc_lower.includes("apple")) return true;
+            if (org_lower.includes("tencent") && dc_lower.includes("tencent")) return true;
+            if (org_lower.includes("baidu") && dc_lower.includes("baidu")) return true;
+            if (org_lower.includes("huawei") && dc_lower.includes("huawei")) return true;
+            if (org_lower.includes("bytedance") && dc_lower.includes("bytedance")) return true;
+            if (org_lower.includes("ibm") && dc_lower.includes("ibm")) return true;
+            if (org_lower.includes("xai") && dc_lower.includes("xai")) return true;
+            if (org_lower.includes("anthropic") && dc_lower.includes("anthropic")) return true;
+            if (org_lower.includes("mistral") && dc_lower.includes("mistral")) return true;
+            
+            // Word-by-word comparison for other companies
+            const org_tokens = org_lower.replace(/[^a-z0-9]/g, ' ').split(/\s+/).filter(x => x.length > 2);
+            for (let k = 0; k < org_tokens.length; k++) {
+                const ot = org_tokens[k];
+                if (ot === "university" || ot === "research" || ot === "corporation" || ot === "technology" || ot === "institute" || ot === "labs") continue;
+                if (dc_tokens.includes(ot)) return true;
+            }
+        }
+        return false;
+    }
+
     const indices = s_chart0_view.selected.indices || [];
     const v_data = s_models_view.data;
     const c0_data = s_chart0_view.data;
@@ -1160,7 +1213,7 @@ update_downstream_callback = CustomJS(args=dict(
         if (!org_latest_info[org] || date_ms > org_latest_info[org].max_date_ms) {
             const d = new Date(date_ms);
             const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-            const date_str = monthNames[d.getMonth()] + " " + d.getFullYear();
+            const date_str = monthNames[d.getUTCMonth()] + " " + d.getUTCFullYear();
             org_latest_info[org] = {
                 max_date_ms: date_ms,
                 model_name: model_name,
@@ -1198,7 +1251,7 @@ update_downstream_callback = CustomJS(args=dict(
     const monthlyMap = {};
     for (let i = 0; i < active_data['pub_date_ms'].length; i++) {
         const d = new Date(active_data['pub_date_ms'][i]);
-        const monthKey = new Date(d.getFullYear(), d.getMonth(), 1).getTime();
+        const monthKey = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
         if (!monthlyMap[monthKey]) {
             monthlyMap[monthKey] = {params_sum: 0, flops_sum: 0, count: 0, params_max: -Infinity, flops_min: Infinity};
         }
@@ -1231,14 +1284,11 @@ update_downstream_callback = CustomJS(args=dict(
     s_monthly_view.data = monthData;
     s_monthly_view.change.emit();
 
-    p2_y_range.start = null;
-    p2_y_range.end = null;
-
     // Sync p2's x_range with the slider to match start date and end date
     const min_year = date_sl.value ? date_sl.value[0] : 2012;
     const max_year = date_sl.value ? date_sl.value[1] : 2026;
-    p2_x_range.start = new Date(min_year, 0, 1).getTime();
-    p2_x_range.end = new Date(max_year, 11, 31).getTime();
+    p2_x_range.start = Date.UTC(min_year, 0, 1);
+    p2_x_range.end = Date.UTC(max_year, 11, 31, 23, 59, 59);
 
     // 4. Update Chart 3 (Map Datacenters)
     const map_m = s_map_master.data;
@@ -1253,14 +1303,7 @@ update_downstream_callback = CustomJS(args=dict(
         
         let pass_comp = true;
         if (has_selection) {
-            pass_comp = false;
-            const parts = comps_str.split(',').map(c => c.trim());
-            for (let j = 0; j < parts.length; j++) {
-                if (active_companies.has(parts[j])) {
-                    pass_comp = true;
-                    break;
-                }
-            }
+            pass_comp = matchCompany(active_companies, comps_str);
         }
         
         if (pass_ctry && pass_comp) {
@@ -1282,9 +1325,12 @@ update_downstream_callback = CustomJS(args=dict(
             let pass_entity = true;
             if (has_selection) {
                 if (t_val === 'By Company') {
-                    pass_entity = active_companies.has(entity);
-                } else {
+                    pass_entity = matchCompany(active_companies, entity);
+                } else if (t_val === 'By Country') {
                     pass_entity = active_countries.has(entity);
+                } else if (t_val === 'All Datacenters') {
+                    const comps_str = matrix_m['company_name'][i] || '';
+                    pass_entity = matchCompany(active_companies, comps_str);
                 }
             }
             if (pass_entity) {
@@ -1294,11 +1340,7 @@ update_downstream_callback = CustomJS(args=dict(
     }
     s_matrix_view.data = matrix_v;
     s_matrix_view.change.emit();
-
-    p4_x_range.start = null;
-    p4_x_range.end = null;
-    p4_y_range.start = null;
-    p4_y_range.end = null;
+    labels4.visible = (t_val !== 'All Datacenters');
 
     // Recalculate average capacity dynamically
     let sum = 0;
@@ -1341,7 +1383,12 @@ update_downstream_callback = CustomJS(args=dict(
         }
     }
 
-    const sort_field = chart5_sort_sel.value;
+    const sort_map = {
+        "CO₂ Emissions (tons/yr)": "total_co2",
+        "DC Capacity (MW)": "total_mw",
+        "Carbon Intensity (gCO₂/kWh)": "avg_carbon"
+    };
+    const sort_field = sort_map[chart5_sort_sel.value] || "total_co2";
     co2_arr.sort((a, b) => a[sort_field] - b[sort_field]);
 
     if (co2_arr.length > 15) {
